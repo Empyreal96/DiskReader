@@ -1,7 +1,8 @@
 {
   "profiles": {
     "DiskReader": {
-      "commandName": "Project"
+      "commandName": "Project",
+      "commandLineArgs": "\\\\.\\PhysicalDrive1 C:\\Test.img"
     }
   }
 }

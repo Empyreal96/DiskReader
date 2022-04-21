@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Management;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace DiskReader
@@ -17,16 +18,16 @@ namespace DiskReader
             Console.WriteLine("");
             if (args.Length == 0)
             {
-               // Console.WriteLine($"Parameters incorrect: {args[0]}, {args[1]}\n\n");
+                // Console.WriteLine($"Parameters incorrect: {args[0]}, {args[1]}\n\n");
                 Console.WriteLine("To read disk to file:");
                 Console.WriteLine(@"DiskReader.exe  \\.\PhysicalDrive1 C:\Output\Path\image.img");
                 Console.WriteLine("");
                 Console.WriteLine("To view connected disks:");
-                Console.WriteLine(@"DiskReader.exe  ListDisks "); 
+                Console.WriteLine(@"DiskReader.exe  ListDisks ");
                 Console.ReadLine();
                 Environment.Exit(1);
             }
-                if (args[0] == "ListDisks")
+            if (args[0] == "ListDisks")
             {
                 var driveQuery = new ManagementObjectSearcher("select * from Win32_DiskDrive");
                 foreach (ManagementObject d in driveQuery.Get())
@@ -101,133 +102,229 @@ namespace DiskReader
                     {
                         Console.WriteLine($"Parameters incorrect: {args[0]}, {args[1]}\n\n");
                         Console.WriteLine("To read disk to file:");
-                        Console.WriteLine(@"DiskReader.exe  \\.\PhysicalDrive1 C:\Output\Path\image.img \n");
+                        Console.WriteLine(@"DiskReader.exe  \\.\PhysicalDrive1 C:\Output\Path\image.img");
+                       // Console.WriteLine(@"DiskReader.exe  E:\ C:\Output\Path\Partition.img \n");
                         Console.WriteLine("To view connected disks:");
                         Console.WriteLine(@"DiskReader.exe  ListDisks ");
+                        Console.WriteLine(@"DiskReader.exe  Volumes ");
                         Console.ReadLine();
                         Environment.Exit(1);
                     }
                     else
                     {
-                        if (args[0].Contains(@"\\.\PhysicalDrive"))
+                        if (args[0].Contains(@"Volumes"))
                         {
+                            Console.WriteLine("Reading connected volumes.");
+                            Console.WriteLine("");
 
-                            string path;
+                            DriveInfo[] allDrives = DriveInfo.GetDrives();
 
-                            if (string.IsNullOrEmpty(args[1]))
+                                foreach (DriveInfo d in allDrives)
+                                {
+                                Console.WriteLine(new string('-', 74));
+                                long totalsize;
+                                    long freesize;
+                                    string volume = DiskInfo.GetVolumeGuidPath(d.Name);
+                                if (d.IsReady == true)
+                                {
+                                    totalsize = d.TotalSize;
+                                    freesize = d.AvailableFreeSpace;
+
+                                    Console.WriteLine($" {volume} | {d.Name} | {d.VolumeLabel}");
+                                    Console.WriteLine($" {freesize.ToFileSize()}\\{totalsize.ToFileSize()} | {d.DriveFormat} | {d.DriveType}");
+                                    Console.WriteLine("");
+                                    Console.WriteLine("");
+
+                                } else
+                                    {
+                                        Console.WriteLine($" {volume} | {d.Name}");
+                                    Console.WriteLine("");
+                                    Console.WriteLine("");
+                                }
+                                    
+                                }
+                                    Console.ReadLine();
+                            }
+                            
+                        
+                        else
+                        {
+                            if (args[0].Contains(@":\"))
                             {
-                                path = @".\image.img";
+                                string path = args[1];
+                                string mount = args[0];
+                                string volume = DiskInfo.GetVolumeGuidPath(mount);
 
+                                Stream stream = new FileStream(volume, FileMode.Open);
+                                
+                                var reader = new BinaryReader(stream);
+
+                                var writer = new BinaryWriter(new FileStream(path, FileMode.Create));
+
+                                var buffer = new byte[4096];
+                                int count;
+                                int loopcount = 0;
+                                //DeviceStream diskStream = new DeviceStream(args[0]);
+                                //Stream fileStream = File.Create(path, 4096, FileOptions.RandomAccess);
+
+
+                                //int size = 0;
+                                try
+                                {
+
+                                    //diskStream.CopyTo(fileStream);
+                                    System.Console.WriteLine($"Writing {args[0]} to file, this will take several minutes");
+                                    while ((count = reader.Read(buffer, 0, buffer.Length)) > 0)
+                                    {
+                                        writer.Write(buffer, 0, buffer.Length);
+                                        // System.Console.Write('.');
+                                        if (loopcount % 100 == 0)
+                                        {
+
+
+
+                                            // writer.Flush();
+                                        }
+                                        loopcount++;
+
+                                    }
+                                }
+                                catch (Exception e)
+                                {
+                                    Debug.WriteLine(e.Message);
+                                    Debug.WriteLine("");
+                                    Debug.WriteLine(e.StackTrace);
+                                    Debug.WriteLine("");
+                                    Debug.WriteLine(e.Source);
+                                    //Console.ReadLine();
+                                }
+                                reader.Close();
+                                writer.Flush();
+                                writer.Close();
+                                Console.WriteLine("Finished");
+                                Console.ReadLine();
+
+                            }
+                            if (args[0].Contains(@"\\.\PhysicalDrive"))
+                            {
+
+                                string path;
+
+                                if (string.IsNullOrEmpty(args[1]))
+                                {
+                                    path = @".\image.img";
+
+                                }
+                                else
+                                {
+                                    path = $"{args[1]}";
+
+                                }
+                                if (File.Exists(path))
+                                {
+                                    File.Delete(path);
+                                }
+
+                                var diskid = Regex.Match(args[0], @"\d+").Value;
+                                // string diskID = args[0].Replace(@"\\.\PhysicalDrive", "");
+                                Debug.WriteLine($"DiskID: {Int32.Parse(diskid)}");
+                                int partcount = 0;
+                                ManagementObjectSearcher searcher = new ManagementObjectSearcher("root\\CIMV2", "SELECT * FROM Win32_DiskPartition");
+                               
+                                Console.WriteLine();
+                                foreach (ManagementObject queryObj in searcher.Get())
+                                {
+
+                                    if ((uint)queryObj["DiskIndex"] == Int32.Parse(diskid))
+                                    {
+                                        partcount++;
+                                        Debug.WriteLine("-----------------------------------");
+
+                                        Debug.WriteLine("Win32_DiskPartition instance");
+
+                                        Debug.WriteLine("Name:{0}", (string)queryObj["Name"]);
+
+                                        Debug.WriteLine("Index:{0}", (uint)queryObj["Index"]);
+
+                                        Debug.WriteLine("DiskIndex:{0}", (uint)queryObj["DiskIndex"]);
+
+                                        Debug.WriteLine("BootPartition:{0}", (bool)queryObj["BootPartition"]);
+                                    }
+
+
+
+
+                                }
+
+
+
+
+
+                                var diskSize = DiskInfo.GetPhysDiskSize(args[0]);
+                                Console.WriteLine($"Selected Disk: {args[0]}");
+                                Console.WriteLine($"Disk Size: {diskSize.ToFileSize().ToString()}");
+                                Console.WriteLine($"No. of Partitions = {partcount}");
+                                Console.WriteLine();
+                                Console.WriteLine($"Selected Output: {path}");
+                                Console.WriteLine("ENTER to continue, or Close this window.");
+                                Console.ReadLine();
+                                var reader = new BinaryReader(new DeviceStream(args[0]));
+
+                                var writer = new BinaryWriter(new FileStream(path, FileMode.Create));
+
+                                var buffer = new byte[4096];
+                                int count;
+                                int loopcount = 0;
+                                //DeviceStream diskStream = new DeviceStream(args[0]);
+                                //Stream fileStream = File.Create(path, 4096, FileOptions.RandomAccess);
+
+
+                                //int size = 0;
+                                try
+                                {
+
+                                    //diskStream.CopyTo(fileStream);
+                                    System.Console.WriteLine($"Writing Data to file, this will take several minutes");
+                                    while ((count = reader.Read(buffer, 0, buffer.Length)) > 0)
+                                    {
+                                        writer.Write(buffer, 0, buffer.Length);
+                                        // System.Console.Write('.');
+                                        if (loopcount % 100 == 0)
+                                        {
+
+
+
+                                            // writer.Flush();
+                                        }
+                                        loopcount++;
+
+                                    }
+                                }
+                                catch (Exception e)
+                                {
+                                    Debug.WriteLine(e.Message);
+                                    Debug.WriteLine("");
+                                    Debug.WriteLine(e.StackTrace);
+                                    Debug.WriteLine("");
+                                    Debug.WriteLine(e.Source);
+                                    //Console.ReadLine();
+                                }
+                                reader.Close();
+                                writer.Flush();
+                                writer.Close();
+                                Console.WriteLine("Finished");
+                                Console.ReadLine();
                             }
                             else
                             {
-                                path = $"{args[1]}";
-
+                                Console.WriteLine($"Parameters incorrect: {args[0]}, {args[1]}\n\n");
+                                Console.WriteLine("To read disk to file:");
+                                Console.WriteLine(@"DiskReader.exe  \\.\PhysicalDrive1 C:\Output\Path\image.img \n");
+                                Console.WriteLine("To view connected disks:");
+                                Console.WriteLine(@"DiskReader.exe  ListDisks ");
+                                Console.ReadLine();
+                                Environment.Exit(1);
                             }
-                            if (File.Exists(path))
-                            {
-                                File.Delete(path);
-                            }
-
-                            var diskid = Regex.Match(args[0], @"\d+").Value;
-                            // string diskID = args[0].Replace(@"\\.\PhysicalDrive", "");
-                            Debug.WriteLine($"DiskID: {Int32.Parse(diskid)}");
-                            int partcount = 0;
-                            ManagementObjectSearcher searcher = new ManagementObjectSearcher("root\\CIMV2", "SELECT * FROM Win32_DiskPartition");
-                            //Console.WriteLine("Scanning selected Disk");
-                            Console.WriteLine();
-                            foreach (ManagementObject queryObj in searcher.Get())
-                            {
-
-                                if ((uint)queryObj["DiskIndex"] == Int32.Parse(diskid))
-                                {
-                                    partcount++;
-                                    Debug.WriteLine("-----------------------------------");
-
-                                    Debug.WriteLine("Win32_DiskPartition instance");
-
-                                    Debug.WriteLine("Name:{0}", (string)queryObj["Name"]);
-
-                                    Debug.WriteLine("Index:{0}", (uint)queryObj["Index"]);
-
-                                    Debug.WriteLine("DiskIndex:{0}", (uint)queryObj["DiskIndex"]);
-
-                                    Debug.WriteLine("BootPartition:{0}", (bool)queryObj["BootPartition"]);
-                                }
-
-
-
-
-                            }
-
-
-
-
-
-                            var diskSize = DiskInfo.GetPhysDiskSize(args[0]);
-                            Console.WriteLine($"Selected Disk: {args[0]}");
-                            Console.WriteLine($"Disk Size: {diskSize.ToFileSize().ToString()}");
-                            Console.WriteLine($"No. of Partitions = {partcount}");
-                            Console.WriteLine();
-                            Console.WriteLine($"Selected Output: {path}");
-                            Console.WriteLine("ENTER to continue, or Close this window.");
-                            Console.ReadLine();
-                            var reader = new BinaryReader(new DeviceStream(args[0]));
-
-                            var writer = new BinaryWriter(new FileStream(path, FileMode.Create));
-
-                            var buffer = new byte[4096];
-                            int count;
-                            int loopcount = 0;
-                            //DeviceStream diskStream = new DeviceStream(args[0]);
-                            //Stream fileStream = File.Create(path, 4096, FileOptions.RandomAccess);
-
-
-                            //int size = 0;
-                            try
-                            {
-
-                                //diskStream.CopyTo(fileStream);
-                                System.Console.WriteLine($"Writing Data to file, this will take several minutes");
-                                while ((count = reader.Read(buffer, 0, buffer.Length)) > 0)
-                                {
-                                    writer.Write(buffer, 0, buffer.Length);
-                                    // System.Console.Write('.');
-                                    if (loopcount % 100 == 0)
-                                    {
-
-
-
-                                        // writer.Flush();
-                                    }
-                                    loopcount++;
-
-                                }
-                            }
-                            catch (Exception e)
-                            {
-                                Debug.WriteLine(e.Message);
-                                Debug.WriteLine("");
-                                Debug.WriteLine(e.StackTrace);
-                                Debug.WriteLine("");
-                                Debug.WriteLine(e.Source);
-                                //Console.ReadLine();
-                            }
-                            reader.Close();
-                            writer.Flush();
-                            writer.Close();
-                            Console.WriteLine("Finished");
-                            Console.ReadLine();
-                        }
-                        else
-                        {
-                            Console.WriteLine($"Parameters incorrect: {args[0]}, {args[1]}\n\n");
-                            Console.WriteLine("To read disk to file:");
-                            Console.WriteLine(@"DiskReader.exe  \\.\PhysicalDrive1 C:\Output\Path\image.img \n");
-                            Console.WriteLine("To view connected disks:");
-                            Console.WriteLine(@"DiskReader.exe  ListDisks ");
-                            Console.ReadLine();
-                            Environment.Exit(1);
                         }
                     }
                 }
@@ -267,6 +364,25 @@ namespace DiskReader
             {
                 public long Length;
             };
+
+
+            [DllImport("kernel32.dll", SetLastError = true)]
+            public static extern bool GetVolumeNameForVolumeMountPoint(
+                string lpszVolumeMountPoint,
+                [Out] StringBuilder lpszVolumeName,
+                int cchBufferLength);
+
+            public static string GetVolumeGuidPath(string mountPoint)
+            {
+                StringBuilder sb = new StringBuilder(50);
+                GetVolumeNameForVolumeMountPoint(mountPoint, sb, 50);
+                return sb.ToString();
+            }
+                
+
+
+
+
 
             public static long GetPhysDiskSize(string physDeviceID)
             {
