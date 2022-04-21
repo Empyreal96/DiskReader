@@ -9,6 +9,7 @@ Open Administrator Command Prompt and type:
 List connected disks:  
 
 `diskreader.exe ListDisks`
+
 `diskreader.exe Volumes`
 
 
